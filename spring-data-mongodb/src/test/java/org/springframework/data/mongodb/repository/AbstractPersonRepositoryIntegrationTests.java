@@ -51,6 +51,7 @@ import org.springframework.data.geo.Point;
 import org.springframework.data.geo.Polygon;
 import org.springframework.data.mongodb.core.MongoOperations;
 import org.springframework.data.mongodb.core.query.BasicQuery;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.mongodb.repository.Person.Sex;
 import org.springframework.data.querydsl.QSort;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
@@ -1183,4 +1184,36 @@ public abstract class AbstractPersonRepositoryIntegrationTests {
 		GeoResults<Person> results = repository.findPersonByLocationNear(new Point(-73.99, 40.73), range);
 		assertThat(results.getContent().isEmpty(), is(false));
 	}
+
+	/**
+	 * @see DATAMONGO-1188
+	 */
+	@Test
+	public void shouldSupportFindAndModfiyForQueryDerivationWithCollectionResult() {
+
+		List<Person> result = repository.findAndModifyByFirstname("Dave", new Update().inc("visits", 42));
+
+		assertThat(result.size(), is(1));
+		assertThat(result.get(0), is(dave));
+
+		Person dave = repository.findOne(result.get(0).getId());
+
+		assertThat(dave.visits, is(42));
+	}
+
+	/**
+	 * @see DATAMONGO-1188
+	 */
+	@Test
+	public void shouldSupportFindAndModfiyForQueryDerivationWithSingleResult() {
+
+		Person result = repository.findOneAndModifyByFirstname("Dave", new Update().inc("visits", 1337));
+
+		assertThat(result, is(dave));
+
+		Person dave = repository.findOne(result.getId());
+
+		assertThat(dave.visits, is(1337));
+	}
+
 }
