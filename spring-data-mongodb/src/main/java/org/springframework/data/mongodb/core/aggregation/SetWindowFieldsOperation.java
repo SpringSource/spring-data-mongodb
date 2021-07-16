@@ -29,7 +29,7 @@ import org.springframework.lang.Nullable;
  * @see <a href=
  *      "https://docs.mongodb.com/manual/reference/operator/aggregation/setWindowFields/">https://docs.mongodb.com/manual/reference/operator/aggregation/setWindowFields/</a>
  */
-public class WindowFieldsOperation
+public class SetWindowFieldsOperation
 		implements AggregationOperation, FieldsExposingAggregationOperation.InheritsFieldsAggregationOperation {
 
 	@Nullable //
@@ -40,11 +40,15 @@ public class WindowFieldsOperation
 
 	private WindowOutput output;
 
-	public WindowFieldsOperation(@Nullable Object partitionBy, @Nullable AggregationOperation sortBy, WindowOutput output) {
+	public SetWindowFieldsOperation(@Nullable Object partitionBy, @Nullable AggregationOperation sortBy, WindowOutput output) {
 
 		this.partitionBy = partitionBy;
 		this.sortBy = sortBy;
 		this.output = output;
+	}
+
+	public static SetWindowFieldsOperationBuilder builder() {
+		return new SetWindowFieldsOperationBuilder();
 	}
 
 	@Override
@@ -95,7 +99,7 @@ public class WindowFieldsOperation
 
 	public static class WindowOutput {
 
-		List<ComputedField> fields;
+		private List<ComputedField> fields;
 
 		public WindowOutput(ComputedField outputField) {
 
@@ -153,10 +157,7 @@ public class WindowFieldsOperation
 		}
 	}
 
-
-
-
-	public interface Window {
+	public interface Windows {
 
 		static DocumentWindow documents(Object lower, Object upper) {
 			return new DocumentWindow(lower, upper);
@@ -166,13 +167,25 @@ public class WindowFieldsOperation
 			return new RangeWindow(lower, upper, unit);
 		}
 
+		static RangeWindowBuilder range() {
+			return new RangeWindowBuilder();
+		}
+
+		static DocumentWindowBuilder documents() {
+			return new DocumentWindowBuilder();
+		}
+	}
+
+
+	public interface Window {
+
 		Object getUpper();
 		Object getLower();
 
 		Document toDocument();
 	}
 
-	public class RangeWindowBuilder {
+	public static class RangeWindowBuilder {
 
 		@Nullable //
 		private Object upper;
@@ -233,7 +246,7 @@ public class WindowFieldsOperation
 
 	}
 
-	public class DocumentWindowBuilder {
+	public static class DocumentWindowBuilder {
 
 		@Nullable //
 		private Object upper;
@@ -241,26 +254,8 @@ public class WindowFieldsOperation
 		@Nullable //
 		private Object lower;
 
-		public DocumentWindowBuilder upper(String upper) {
-
-			this.upper = upper;
-			return this;
-		}
-		public DocumentWindowBuilder lower(String lower){
-
-			this.lower = lower;
-			return this;
-		}
-		public DocumentWindowBuilder upper(Number upper) {
-
-			this.upper = upper;
-			return this;
-		}
-
-		public DocumentWindowBuilder lower(Number lower){
-
-			this.lower = lower;
-			return this;
+		public DocumentWindowBuilder from(Number lower) {
+			return lower(lower);
 		}
 
 		public DocumentWindowBuilder fromCurrent() {
@@ -271,16 +266,42 @@ public class WindowFieldsOperation
 			return lower("unbounded");
 		}
 
+
+
+		public DocumentWindowBuilder to(String upper) {
+
+			this.upper = upper;
+			return this;
+		}
+
+		DocumentWindowBuilder lower(String lower){
+
+			this.lower = lower;
+			return this;
+		}
+		public DocumentWindowBuilder to(Number upper) {
+
+			this.upper = upper;
+			return this;
+		}
+
+		DocumentWindowBuilder lower(Number lower) {
+
+			this.lower = lower;
+			return this;
+		}
+
+
 		public DocumentWindowBuilder toCurrent() {
-			return upper("current");
+			return to("current");
 		}
 
 		public DocumentWindowBuilder toUnbounded() {
-			return upper("unbounded");
+			return to("unbounded");
 		}
 
 		public DocumentWindow build() {
-			return new DocumentWindow(upper, lower);
+			return new DocumentWindow(lower, upper);
 		}
 	}
 
@@ -360,44 +381,89 @@ public class WindowFieldsOperation
 	}
 
 
-	public static class WindowFieldsOperationBuilder {
+	public static class SetWindowFieldsOperationBuilder {
 
 		private Object partitionBy;
 		private SortOperation sortOperation;
 		private WindowOutput output;
 
-		public WindowFieldsOperationBuilder partitionByField(String fieldName) {
+		public SetWindowFieldsOperationBuilder partitionByField(String fieldName) {
 			return partitionBy(Fields.field("$" + fieldName, fieldName));
 		}
 
-		public WindowFieldsOperationBuilder partitionByExpression(AggregationExpression expression) {
+		public SetWindowFieldsOperationBuilder partitionByExpression(AggregationExpression expression) {
 			return partitionBy(expression);
 		}
 
-		public WindowFieldsOperationBuilder sortBy(Sort sort) {
+		public SetWindowFieldsOperationBuilder sortBy(String... fields) {
+			return sortBy(Sort.by(fields));
+		}
+
+		public SetWindowFieldsOperationBuilder sortBy(Sort sort) {
 			return sortBy(new SortOperation(sort));
 		}
 
-		public WindowFieldsOperationBuilder sortBy(SortOperation sort) {
+		public SetWindowFieldsOperationBuilder sortBy(SortOperation sort) {
 			this.sortOperation = sort;
 			return this;
 		}
 
-		public WindowFieldsOperationBuilder output(WindowOutput output) {
+		public SetWindowFieldsOperationBuilder output(WindowOutput output) {
 
 			this.output = output;
 			return this;
 		}
 
 
-		public WindowFieldsOperationBuilder partitionBy(Object value) {
+
+		public WindowChoice output(AggregationExpression expression) {
+
+			return new WindowChoice() {
+
+				@Nullable
+				private Window window;
+
+				@Override
+				public As within(Window window) {
+
+					this.window = window;
+					return this;
+				}
+
+				@Override
+				public SetWindowFieldsOperationBuilder as(String targetFieldName) {
+
+					ComputedField computedField = new ComputedField(targetFieldName, expression, window);
+
+					if(SetWindowFieldsOperationBuilder.this.output == null) {
+						SetWindowFieldsOperationBuilder.this.output = new WindowOutput(computedField);
+					} else {
+						SetWindowFieldsOperationBuilder.this.output.append(computedField);
+					}
+
+					return SetWindowFieldsOperationBuilder.this;
+				}
+			};
+		}
+
+		public interface As {
+			SetWindowFieldsOperationBuilder as(String targetFieldName);
+		}
+
+		public interface WindowChoice extends As {
+
+			As within(Window window);
+
+		}
+
+		public SetWindowFieldsOperationBuilder partitionBy(Object value) {
 
 			partitionBy = value;
 			return this;
 		}
 
-		public WindowFieldsOperation build() {
-			return new WindowFieldsOperation(partitionBy, sortOperation,  output);
+		public SetWindowFieldsOperation build() {
+			return new SetWindowFieldsOperation(partitionBy, sortOperation,  output);
 		}
 	}
 
